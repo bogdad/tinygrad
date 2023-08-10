@@ -126,11 +126,15 @@ def hand_coded_optimizations(k:Linearizer):
       global_count = k.first_reduce
 
       # upcast first
-      if k.full_shape[k.first_reduce] > 8: k.shift_to(k.first_reduce, 8)
+      if k.full_shape[k.first_reduce] > 8: 
+        print("first shift to")
+        k.shift_to(k.first_reduce, 8)
       k.upcast()
 
       # 2 locals
+      print("second shift to")
       k.shift_to(s1, 8, insert_before=k.first_reduce)  # axis 2
+      print("third shift to")
       k.shift_to(s0, 8, insert_before=k.first_reduce)  # axis 3
 
       # permuted+upcast for tensor cores

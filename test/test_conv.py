@@ -71,7 +71,7 @@ class TestConv(unittest.TestCase):
 
     w = Tensor.ones(16,32,1,1)
     x = x.conv2d(w).elu()
-
+    print("after here it will crash!")
     x = x.numpy()
     print(x.shape)
     Tensor.no_grad = False

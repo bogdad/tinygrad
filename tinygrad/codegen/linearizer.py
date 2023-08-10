@@ -559,7 +559,9 @@ class Linearizer:
   # apply reshape and permute to all shapetrackers
   def reshape_and_permute(self, new_shape_fxn, axis):
     for st in self.sts:
-      if new_shape_fxn is not None: st.reshape(tuple(new_shape_fxn(st.shape)))
+      if new_shape_fxn is not None:
+        print("st.shape", st.shape, "nsfxn", new_shape_fxn(st.shape), "axis", axis) 
+        st.reshape(tuple(new_shape_fxn(st.shape)))
       if axis is not None: st.permute(tuple(axis))
 
   # drops the final dimension
@@ -575,6 +577,7 @@ class Linearizer:
     if insert_before is None: insert_before = self.shape_len
     move_axis = axis if top else axis+1
     if move_axis < insert_before: insert_before += 1
+    
     self.reshape_and_permute(
       lambda x: list(x[0:axis]) + (([amount, x[axis]//amount] if top else [x[axis]//amount, amount]) if x[axis] > 1 else [1,1]) + list(x[axis+1:]),
       [i for i in range(insert_before) if i != move_axis] + [move_axis] + [i for i in range(insert_before, self.shape_len+1) if i != move_axis])

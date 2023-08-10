@@ -241,6 +241,7 @@ class ShapeTracker:
       else: assert new_var.val == new_val, f"value conflicts, was {new_var.val}, set to {new_val}"
 
     if self.views[-1].shape == new_shape: return self
+    print([x for x in new_shape])
     assert all(is_sym_int(x) and x > 0 for x in new_shape), f"shape must be symbolic ints and can't contain 0 or negative numbers {new_shape}"
     # only check size for int shapes. we don't check symbolic here as long as the reshape itself can be done
     if all(isinstance(s, int) for s in self.shape) and all(isinstance(s, int) for s in new_shape):
