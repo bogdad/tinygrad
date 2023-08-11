@@ -117,6 +117,12 @@ def hand_coded_optimizations(k:Linearizer):
     buf1_strides = k.sts[buf1].real_strides()
     axis_buf0 = [(i,k.full_shape[i],buf1_strides[i]) for i,s in enumerate(buf0_strides) if s == 0 and k.full_shape[i]%8 == 0]
     axis_buf1 = [(i,k.full_shape[i],buf0_strides[i]) for i,s in enumerate(buf1_strides) if s == 0 and k.full_shape[i]%8 == 0]
+    print("k.full_shape", k.full_shape)
+    print("k.first_reduce", k.first_reduce)
+    print("buf0_strides", buf0_strides)
+    print("buf1_strides", buf1_strides)
+    print("axis_buf0", axis_buf0)
+    print("axis_buf1", axis_buf1)
     if len(axis_buf0) and len(axis_buf1) and k.full_shape[k.first_reduce]%8 == 0 and (k.shape_len-k.first_reduce) == 1:
       if DEBUG >= 3: print("TENSOR CORES", axis_buf0, axis_buf1)
       k.use_tensor_cores = getenv("TC", 1) == 1  # TC=2 will do the shape ops without the WMMA
@@ -124,6 +130,7 @@ def hand_coded_optimizations(k:Linearizer):
       # TODO: select axis in smart way
       s0, s1 = axis_buf0[-1][0], axis_buf1[-1][0]
       global_count = k.first_reduce
+      print("s0", s0, "s1", s1, "first_reduce", k.first_reduce)
 
       # upcast first
       if k.full_shape[k.first_reduce] > 8: 

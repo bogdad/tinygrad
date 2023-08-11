@@ -18,6 +18,9 @@ class TestLinearizer(unittest.TestCase):
     assert len(rawbufs) == 3 and set(rawbufs[1:]) == {a.lazydata.realized, b.lazydata.realized}
     np_c = (np_a[:2] - np_a[2:]) - (np_b[:2] - np_b[2:])
     np.testing.assert_allclose(np_c, c.numpy())
+  def test_tc(self):
+    res = Tensor.rand(16,16).matmul(Tensor.rand(16,16))
+    res.lazydata.realize()
 
 if __name__ == '__main__':
   unittest.main()
