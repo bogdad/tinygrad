@@ -128,39 +128,70 @@ def hand_coded_optimizations(k:Linearizer):
       k.use_tensor_cores = getenv("TC", 1) == 1  # TC=2 will do the shape ops without the WMMA
 
       # TODO: select axis in smart way
-      s0, s1 = axis_buf0[-1][0], axis_buf1[-1][0]
+      #s0, s1 = axis_buf0[-1][0], axis_buf1[-1][0]
+      s0 = next((s[0] for s in reversed(axis_buf0) if s[0] != k.first_reduce), None)
+      s1 = next((s[0] for s in reversed(axis_buf1) if s[0] != k.first_reduce and s[0] != s0), None)
+      
       global_count = k.first_reduce
       print("s0", s0, "s1", s1, "first_reduce", k.first_reduce)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
+
 
       # upcast first
       if k.full_shape[k.first_reduce] > 8: 
         print("first shift to")
         k.shift_to(k.first_reduce, 8)
+      
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.full_shape", k.full_shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
+      print("xxx upcast")
       k.upcast()
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.full_shape", k.full_shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
+
+
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.full_shape", k.full_shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
 
       # 2 locals
       print("second shift to")
       k.shift_to(s1, 8, insert_before=k.first_reduce)  # axis 2
       print("third shift to")
       k.shift_to(s0, 8, insert_before=k.first_reduce)  # axis 3
+      
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.full_shape", k.full_shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
 
       # permuted+upcast for tensor cores
-      k.shift_to(global_count, 4, insert_before=k.first_reduce)
-      k.shift_to(global_count+1, 4, insert_before=k.first_reduce)
+      print("fourth shift to", global_count, 4, "insert_before",k.first_reduce)
+      k.shift_to(global_count, 4, "insert_before",k.first_reduce)
+      print("fifth shift to", global_count+1, 4, "insert_before",k.first_reduce)
+      k.shift_to(global_count+1, 4, "insert_before",k.first_reduce)
+      print("sixth shift to", k.first_reduce-1, 2)
       k.shift_to(k.first_reduce-1, 2)
+      print("xxx upcast")
       k.upcast()
+      
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
 
       # final global upcast
       for ax in [s1, s0]:
         for upc in [4,3,2]:
           if k.full_shape[ax]%upc == 0:
+            print("loop shift_to ", ax, upc)
             k.shift_to(ax, upc)
             k.upcast()
             break
 
+      print("k.first_reduce", k.first_reduce, "k.sts[0].shape", k.sts[0].shape, "k.shape_len", k.shape_len, "k.upcasted", k.upcasted)
+      print("xxx fr", [(x,y) for x,y in zip(k.sts[0].shape[:k.shape_len-k.upcasted]+(0,), k.full_shape[:k.shape_len-k.upcasted]+(1,))])
+
+
       # alias buffer
       k.local_dims = k.first_reduce - global_count
       alias_pattern = [0]*global_count + [2] * k.local_dims + [0] * (k.shape_len-k.upcasted-k.first_reduce) + [1,1] + [3] * (k.upcasted-2)
+      print("xxx alias_pattern", alias_pattern, "k.local_dims", k.local_dims, "k.first_reduce", k.first_reduce, "global_count", global_count)
       k.alias_buffer(buf0, alias_pattern)
       k.alias_buffer(buf1, alias_pattern)
 

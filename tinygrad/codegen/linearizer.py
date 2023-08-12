@@ -303,6 +303,7 @@ class Linearizer:
       self.uop(UOps.DEFINE_GLOBAL, None, [], (name, buf.dtype))
 
     # add a local buffer for multistage reduce
+    print("xxx self.group_for_reduce", self.group_for_reduce)
     if len(self.group_for_reduce):
       # TODO: the strides of this can be controlled
       self.sts.append(ShapeTracker(tuple([1] * self.first_reduce + self.group_for_reduce + [1] * (self.shape_len - self.upcasted - len(self.group_for_reduce) - self.first_reduce) + [x[0] for x in self.upcasted_axis(0)])))
@@ -562,8 +563,9 @@ class Linearizer:
       old_shape = st.shape
       if new_shape_fxn is not None:
         st.reshape(tuple(new_shape_fxn(st.shape)))
+      if new_shape_fxn is not None: print("st.shape", old_shape, st.shape) 
       if axis is not None: st.permute(tuple(axis))
-      if new_shape_fxn is not None: print("st.shape", old_shape, st.shape, "axis", axis) 
+      if new_shape_fxn is not None: print("st.views[-1] after permute", old_shape, st.views[-1], "axis", axis) 
 
   # drops the final dimension
   def upcast(self):
@@ -575,6 +577,7 @@ class Linearizer:
   # top : if you want to pull that amount from the top
   # insert_before : place to insert the new stuff
   def shift_to(self, axis, amount, top=False, insert_before=None):
+    ## xxxx inserts [x[axis]//amount, amount] at instead of x[axis] and permutes the axis+1 to the end.  
     print("xxx shift to", axis, amount, top, insert_before)
     if insert_before is None: insert_before = self.shape_len
     move_axis = axis if top else axis+1
@@ -583,6 +586,7 @@ class Linearizer:
     self.reshape_and_permute(
       lambda x: list(x[0:axis]) + (([amount, x[axis]//amount] if top else [x[axis]//amount, amount]) if x[axis] > 1 else [1,1]) + list(x[axis+1:]),
       [i for i in range(insert_before) if i != move_axis] + [move_axis] + [i for i in range(insert_before, self.shape_len+1) if i != move_axis])
+
 
   # ******************** complex simplifiers ********************
 
