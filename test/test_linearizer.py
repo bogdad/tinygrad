@@ -19,7 +19,13 @@ class TestLinearizer(unittest.TestCase):
     np_c = (np_a[:2] - np_a[2:]) - (np_b[:2] - np_b[2:])
     np.testing.assert_allclose(np_c, c.numpy())
   def test_tc(self):
-    res = Tensor.ones(8,8).contiguous().matmul(Tensor.ones(8,8).contiguous())
+    res = Tensor.ones(8,8).contiguous().matmul(Tensor.ones(8,8))
+    print(res.lazydata.realize().toCPU())
+  def test_lo(self):
+    res = Tensor.rand(8,8).matmul(Tensor.rand(8,8))
+    print(res.lazydata.realize().toCPU())
+  def test_sm(self):
+    res = Tensor.ones(8,8).contiguous()+Tensor.ones(8,8)
     print(res.lazydata.realize().toCPU())
 
 if __name__ == '__main__':

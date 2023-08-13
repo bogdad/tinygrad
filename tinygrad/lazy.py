@@ -47,6 +47,7 @@ def _ast_reduceops(self:LazyBuffer) -> LazyOp:
     # it's equivalent to performing the initial reduction and multiplying the result
     # by the size of the expanded dimension.
     if SIMPLIFY_SUM_RESHAPE_EXPAND_SUM and src.op.op == MovementOps.EXPAND: # type: ignore
+      print("xxx simplify_sum_reshape_expand")
       expanded = src.op.src[0] # type: ignore
       if expanded.op.op == MovementOps.RESHAPE: # type: ignore
         reshaped = expanded.op.src[0] # type: ignore
@@ -137,15 +138,18 @@ class LazyBuffer:
 
   def realize(self:LazyBuffer) -> LazyBuffer:
     if not self.realized:
-      # get real ops first
-      if self.optype is BinaryOps: self.op = _ast_binaryops(self)
+      # get real ops first 
+      if self.optype is BinaryOps:
+        self.op = _ast_binaryops(self)
       elif self.optype is ReduceOps:
         self.op = _ast_reduceops(self)
         if self.op.op in BinaryOps: self.op = _ast_binaryops(self)
       elif self.optype is LoadOps: LOAD_OPS_DISPATCHER[cast(LoadOps, self.op.op)](self)
       # run the ast if we still have to, and log the op
       if not self.realized:
-        for x in self.op.buffers: x.realize()
+        for x in self.op.buffers: 
+          x.realize()
+        print("xxx lazy realized", self.op.op)
 
         # HACK: image shape can be wrong, hot cast it back to a normal float
         if self.dtype.__class__ is ImageDType and self.optype != MovementOps and (prod(self.shape) != prod(cast(ImageDType, self.dtype).shape) or not any(self.shape[x]%4 == 0 for x in self.st.unit_stride_axes())):

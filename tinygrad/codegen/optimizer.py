@@ -192,7 +192,7 @@ def hand_coded_optimizations(k:Linearizer):
       k.local_dims = k.first_reduce - global_count
       alias_pattern = [0]*global_count + [2] * k.local_dims + [0] * (k.shape_len-k.upcasted-k.first_reduce) + [1,1] + [3] * (k.upcasted-2)
       print("xxx alias_pattern", alias_pattern, "k.local_dims", k.local_dims, "k.first_reduce", k.first_reduce, "global_count", global_count)
-      k.alias_buffer(buf0, alias_pattern)
+      k.alias_buffer(buf0, alias_pattern) 
       k.alias_buffer(buf1, alias_pattern)
 
       # very late upcast to run group at the same time. only if actually using real tensor cores, otherwise local isn't a simdgroup

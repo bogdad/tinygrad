@@ -100,10 +100,18 @@ def get_grouped_maybe_float4(*values:List[Token], grouping_allowed=True):
 
 # TODO: generic visitor pattern?
 def expand_node(idx:Node) -> List[Node]:
-  if isinstance(idx, Variable): return [idx] if idx.expr is not None else [Variable.num(j) for j in range(idx.min, idx.max+1)]
-  if isinstance(idx, NumNode): return [idx]
-  if isinstance(idx, MulNode): return [x*idx.b for x in expand_node(idx.a)]
-  if isinstance(idx, SumNode): return [Variable.sum(list(it)) for it in itertools.product(*[expand_node(x) for x in idx.nodes])]
+  if isinstance(idx, Variable): 
+    print("xxx expand_node Variable id.expr", idx.expr, "idx.min", idx.min, idx.max)
+    return [idx] if idx.expr is not None else [Variable.num(j) for j in range(idx.min, idx.max+1)]
+  if isinstance(idx, NumNode): 
+    print("xxx expand_node NumNode")
+    return [idx]
+  if isinstance(idx, MulNode): 
+    print("xxx expand_node MulNode")
+    return [x*idx.b for x in expand_node(idx.a)]
+  if isinstance(idx, SumNode):
+    print("xxx expand_node SumNode idx.nodes", idx.nodes)
+    return [Variable.sum(list(it)) for it in itertools.product(*[expand_node(x) for x in idx.nodes])]
   raise NotImplementedError(idx)
 
 def expand_idxs(idxs:Sequence[Node]) -> Iterator[Tuple[Node, ...]]:
@@ -165,6 +173,7 @@ class Linearizer:
 
   def process(self) -> None:
     if hasattr(self, "sts"): return   # already processed
+    print("xxx linearizer process", id(self))
 
     # fetch lazyop info
     self.info: FlopCounter = get_lazyop_info(cast(LazyOp, self.ast))
@@ -176,6 +185,7 @@ class Linearizer:
     self.reduceop = reduceops[0] if reduceops else None
 
     # get earlybufs, before the one reduce op
+    print("xxx reduceop buffers", self.reduceop.buffers if self.reduceop else [])
     self.earlybufs = dedup(self.reduceop.buffers) if self.reduceop else []
 
     # create new shapetrackers inside this kernel, we will permute them
@@ -226,20 +236,28 @@ class Linearizer:
     return [x for x in self.sts[i].unit_stride_axes() if should_upcast and x >= self.shape_len-self.upcasted and self.sts[i].shape[x] > 1]
 
   def global_load(self, i:int, idxs:Sequence[VariableOrNum], const=None) -> List[Token]:
-    if isinstance(self.bufs[i].realized, RawConst): const = self.bufs[i].realized._buf
-
+    if isinstance(self.bufs[i].realized, RawConst): 
+      print("xxx global_load RawConst")
+      const = self.bufs[i].realized._buf
+    print("xxx global_load input idxs", idxs)
     expanded_nodes = [expand_node(idx) for idx in idxs]
+    print("xxx global_load expanded_nodes", expanded_nodes)
+    print("xxx global_load expanded_nodes[::-1]", expanded_nodes[::-1])
+    # a bit of flatten the iterables. if one of expanded nodes has length bigger than 1
+    # copy everything else choosing an instance of that node.   
     _idxs = [x[::-1] for x in itertools.product(*expanded_nodes[::-1])]
+    print("xxx global_load _idxs", _idxs)
     upcast_dim = self.get_upcast_dim(i)
 
     amt = 1
     if len(upcast_dim) == 1 and len(expanded_nodes[upcast_dim[0]]) in [4,2]:
       dim, amt = upcast_dim[0], len(expanded_nodes[upcast_dim[0]])
-
+    print("xxx global_load upcast_dim", upcast_dim, "dim", dim if amt > 1 else -1, "amt", amt)
     cache: Dict[str, Token] = {}
     ret = []
     invalid_value = 0 if dtypes.is_int(self.bufs[i].dtype) else 0.0
     for _idx in _idxs:
+      print("xxx global load _idx ", _idx)
       if amt > 1:
         idx, valid = self.sts[i].expr_idxs((_idx[:dim] + (expanded_nodes[dim][0],) + _idx[dim+1:]))
         localtype = dtypes._float4 if amt == 4 else dtypes._float2
@@ -250,10 +268,12 @@ class Linearizer:
         idx, valid = self.sts[i].expr_idxs(_idx)
         localtype = dtypes.float32
       this_const, valid, key = (invalid_value, cast(Variable, Variable.num(1)), f"{localtype}INVALID") if valid.max == 0 else (const, valid, f"{localtype}{idx.render()}{valid.render()}")
+      print("xxx global_load const", this_const)
       if key not in cache:
         if isinstance(self.bufs[i].dtype, ImageDType): idx = to_image_idx(self.bufs[i].dtype.shape, idx, valid)
         cache[key] = self.uop(UOps.LOAD, Token(f"val{mnum(i)}_{len(cache)}", localtype), [], MemOp(self.get_buffer_name(i), idx, self.bufs[i].__class__ is LocalBuffer, self.bufs[i].dtype, valid, invalid_value)) if this_const is None else \
                      self.uop(UOps.LOAD, Token(f"acc{mnum(i)}_{len(cache)}", localtype), [], ConstOp(this_const, valid))
+      print("xxx global load append")
       ret.append(Token(cache[key].name, cache[key].dtype, expanded_nodes[dim].index(_idx[dim])) if localtype != dtypes.float else cache[key])
     return ret
 
@@ -348,6 +368,7 @@ class Linearizer:
     if self.reduceop is not None:
       # define indexes
       reduce_idxs = [Variable(f"ridx{i}", 0, self.full_shape[i]-1) for i in range(self.first_reduce+len(self.group_for_reduce), self.shape_len-self.upcasted)]
+      print("xxx linearizer reduce_idxs range", range(self.first_reduce+len(self.group_for_reduce), self.shape_len-self.upcasted))
       fake_reduce_idxs = [x*0 for x in reduce_idxs]
 
       # define accumulator
@@ -365,6 +386,11 @@ class Linearizer:
         strides = self.sts[i].real_strides()
         extra_locals = [lidx for lidx,st in zip(local_idxs[self.exclude_local_upcast:], strides[len(global_idxs)+self.exclude_local_upcast:self.first_reduce]) if st == 0]
         this_upcast_idxs: List[Node] = []
+        print("xxx strides", strides)
+        print("xxx global_idxs", global_idxs)
+        print("xxx local_idxs", local_idxs)
+        print("xxx reduce_idx", reduce_idxs)
+
         for j,v in enumerate(full_upcast_idxs):
           if strides[len(global_idxs)+len(local_idxs)+len(reduce_idxs)+j] == 0:
             if DEBUG >= 4: print("upcasting stride 0")
@@ -385,17 +411,31 @@ class Linearizer:
             if DEBUG >= 4 and rem > 1: print(f"failed upcasting partial stride {rem} extra locals {extra_locals}")
             this_upcast_idxs.append(tacc + Variable(None, 0, rem-1))
           else:
+            print("xxx linearizer failed upcasting")
+            print("xxx j", j)
+            print("xxx stride.ind", len(global_idxs)+len(local_idxs)+len(reduce_idxs)+j, "stride", strides[len(global_idxs)+len(local_idxs)+len(reduce_idxs)+j])
             if DEBUG >= 4: print(f"failed upcasting stride {v} extra locals {extra_locals}")
             this_upcast_idxs.append(v)
+        print("xxx upcast_idxs", upcast_idxs)
         idxs = global_idxs+local_idxs+reduce_idxs+this_upcast_idxs
+        print("xxx idxs", idxs)
+        is_const = True if isinstance(self.bufs[i].realized, RawConst) else False 
+        print("xxx is_const", is_const)
         ll = self.global_load(i, idxs)
-        locals_to_store.append((self.bufs.index(self.local_alias[i]), idxs, ll))
+        print("xxx locals to store append", self.bufs.index(self.local_alias[i]), "idxs", idxs, "ll", ll)
+        locals_to_store.append((self.bufs.index(self.local_alias[i]), idxs, ll, is_const))
 
       # copy in any global buffers
       if self.use_tensor_cores:
         i = 0
-        for y0,y1 in zip(locals_to_store[1][2][::2], locals_to_store[1][2][1::2]):
-          for x0,x1 in zip(locals_to_store[0][2][::2], locals_to_store[0][2][1::2]):
+        lc1 = locals_to_store[1][3]
+        lc0 = locals_to_store[0][3]
+        print("xxx lc1", lc1, "lc0", lc0, "ss", locals_to_store[1][2][1::2] if not locals_to_store[1][3] else locals_to_store[1][2][::2])
+        print("xxx linearizer global_buffers", locals_to_store[1], locals_to_store[0])
+        print("xxx linearizer global_buffers 1", locals_to_store[1][2][::2], locals_to_store[1][2][1::2] if not locals_to_store[1][3] else locals_to_store[1][2][::2])
+        print("xxx linearizer global_buffers 0", locals_to_store[0][2][::2], locals_to_store[0][2][1::2] if not locals_to_store[0][3] else locals_to_store[0][2][::2])
+        for y0,y1 in zip(locals_to_store[1][2][::2], locals_to_store[1][2][1::2] if not locals_to_store[1][3] else locals_to_store[1][2][::2]):
+          for x0,x1 in zip(locals_to_store[0][2][::2], locals_to_store[0][2][1::2] if not locals_to_store[0][3] else locals_to_store[0][2][::2]):
             self.uop(UOps.WMMA, None, [x0, x1, y0, y1, acc[i], acc[i+1]], ())
             i += 2
       else:
@@ -414,6 +454,7 @@ class Linearizer:
       self.uop(UOps.ENDLOOP, None, [], (reduce_idxs, "reduce"))
 
       # end the local loop, do the local reduce
+      print("xxx linearizer self.group_for_reduce", self.group_for_reduce)
       if self.group_for_reduce:
         fake_global_idxs = [x*0 for x in global_idxs]
         self.global_store(-1, fake_global_idxs+local_idxs+fake_reduce_idxs+upcast_idxs, acc, ssa)  # store accumulators
